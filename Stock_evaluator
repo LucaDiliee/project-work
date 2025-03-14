@@ -1,0 +1,23 @@
+import yfinance as yf
+import pandas as pd
+import os
+import streamlit as st
+
+"""
+# Stocks evaluator
+hi user, write a stock name
+"""
+
+ticker = st.text_input("Inserisci il ticker della stock:", "AAPL")  
+# Valore predefinito: Apple
+
+# Scarica i dati se è stato inserito un ticker
+if ticker:
+    stock = yf.Ticker(ticker)
+    
+# Scarica i dati dell'ultimo mese 
+    data = stock.history(period="1mo")   
+    st.write(f"Prezzi storici di {ticker}:")
+    st.write(data)
+
+#Calcolare la media: def calculate_mean(data, window=30):
