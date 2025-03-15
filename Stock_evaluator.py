@@ -21,3 +21,6 @@ if st.button("Scarica dati"):
             st.error("⚠️ Nessun dato trovato. Controlla il ticker.")
         else:
             st.write(data)
+
+def calculate_mean_close (data):
+    return data["Close"].mean()  # Media della colonna 'Close'
