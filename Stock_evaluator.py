@@ -16,19 +16,25 @@ exchange_to_index = {
     "AMEX": "^GSPC",      # American Stock Exchange → S&P 500
     "NMS": "^GSPC",       # Nasdaq NMS → S&P 500 (aggiunto!)
     "MIL": "FTSEMIB.MI",  # Borsa Italiana → FTSE MIB
-    "Paris": "^FCHI",     # Euronext Paris → CAC 40
+    "PAR": "^FCHI",     # Euronext Paris → CAC 40
     "XETRA": "^GDAXI",    # Borsa tedesca (Deutsche Börse) → DAX
-    "Tokyo": "^N225"      # Borsa di Tokyo → Nikkei 225
+    "GER": "^GDAXI",    # Borsa tedesca (Deutsche Börse) → DAX
+    "Tokyo": "^N225",      # Borsa di Tokyo → Nikkei 225
+    "PNK": "^N225"      # Borsa di Tokyo → Nikkei 225
 }
 
 if 'stock_data_loaded' not in st.session_state:
     st.session_state.stock_data_loaded = False
+if 'index_data_loaded' not in st.session_state:  # Nuova variabile di stato
+    st.session_state.index_data_loaded = False
 if 'exchange' not in st.session_state:
     st.session_state.exchange = "Unknown"
 if 'market_index' not in st.session_state:
     st.session_state.market_index = "N/A"
 if 'stock_data' not in st.session_state:
     st.session_state.stock_data = None
+if 'index_data' not in st.session_state:  # Nuova variabile per i dati dell'indice
+    st.session_state.index_data = None
 if 'beta' not in st.session_state:
     st.session_state.beta = "N/A"
 if 'ticker' not in st.session_state:
@@ -64,6 +70,12 @@ def display_stock_data():
         st.write(f"📊 Prezzi storici di **{st.session_state.ticker}**:", st.session_state.stock_data)
         st.write("Il Beta dell'azienda è:", st.session_state.beta)
 
+# Nuova funzione per visualizzare i dati dell'indice
+def display_index_data():
+    if st.session_state.index_data_loaded:
+        st.write(f"📊 Dati storici per l'indice {st.session_state.market_index}:")
+        st.write(st.session_state.index_data)
+
 # Initialize exchange and market_index variables outside the button handlers
 exchange = "Unknown"
 market_index = "N/A"
@@ -96,6 +108,8 @@ if st.button("Scarica dati stock"):
             
             # Set flag that stock data has been loaded
             st.session_state.stock_data_loaded = True
+            # Reset index data loaded flag when new stock is loaded
+            st.session_state.index_data_loaded = False
     else:
         # This is what was missing - display error for invalid ticker
         st.error("⚠️ Nessun dato trovato. Controlla il ticker.")
@@ -106,17 +120,44 @@ elif st.session_state.stock_data_loaded:
 
 # Show the second button only if stock data has been loaded
 if st.session_state.stock_data_loaded:
+    # Mostra sempre i dati dell'indice se sono stati caricati
+    if st.session_state.index_data_loaded:
+        display_index_data()
+
     if st.button("Scarica dati dell'indice di riferimento"):
         market_index = st.session_state.market_index
 
         if market_index != "N/A":
             index_data = yf.Ticker(market_index).history(period="1mo") # Dati per l'ultimo mese
             if not index_data.empty:
+                # Salva i dati nella session state
+                st.session_state.index_data = index_data
+                st.session_state.index_data_loaded = True
+                
                 st.write(f"📊 Dati storici per l'indice {market_index}:")
                 st.write(index_data)
             else:
                 st.error("⚠️ Nessun dato trovato per l'indice.")
         else:
             st.error("⚠️ Nessun indice di riferimento disponibile.")
+    
+    # Terzo bottone (ora correttamente indentato all'interno del blocco principale)
+    if st.button("Calcola rendimenti giornalieri"):
+        
+        # Calcola i rendimenti giornalieri percentuali dello stock
+        stock_returns = st.session_state.stock_data['Close'].pct_change() * 100
+        st.write(f"📈 Rendimenti giornalieri percentuali di **{st.session_state.ticker}**:")
+        st.write(pd.DataFrame(stock_returns, columns=['Returns %']))
+        
+        # Se anche i dati dell'indice sono stati caricati, calcola i rendimenti dell'indice
+        if st.session_state.index_data_loaded:
+            index_returns = st.session_state.index_data['Close'].pct_change() * 100
+            st.write(f"📈 Rendimenti giornalieri percentuali dell'indice **{st.session_state.market_index}**:")
+            st.write(pd.DataFrame(index_returns, columns=['Returns %']))
+            
+            # Calcola la correlazione tra i rendimenti dello stock e dell'indice
+            # Elimina la prima riga (che contiene NaN) per entrambi i rendimenti
+            correlation = stock_returns[1:].corr(index_returns[1:])
+            st.write(f"Correlazione tra i rendimenti: **{correlation:.4f}**")
 else:
     st.info("⚠️ Scarica prima i dati dello stock per poter visualizzare l'indice di riferimento.")
