@@ -15,7 +15,7 @@ exchange_to_index = {
     "NYSE": "^GSPC",      # New York Stock Exchange → S&P 500
     "AMEX": "^GSPC",      # American Stock Exchange → S&P 500
     "NMS": "^GSPC",       # Nasdaq NMS → S&P 500 (aggiunto!)
-    "Milan": "FTSEMIB.MI",  # Borsa Italiana → FTSE MIB
+    "MIL": "FTSEMIB.MI",  # Borsa Italiana → FTSE MIB
     "Paris": "^FCHI",     # Euronext Paris → CAC 40
     "XETRA": "^GDAXI",    # Borsa tedesca (Deutsche Börse) → DAX
     "Tokyo": "^N225"      # Borsa di Tokyo → Nikkei 225
@@ -47,6 +47,16 @@ def get_market_index(ticker):
     market_index = exchange_to_index.get(exchange, "N/A")
     return exchange, market_index
 
+# Add this function to check if ticker is valid
+def is_valid_ticker(ticker_symbol):
+    try:
+        ticker_obj = yf.Ticker(ticker_symbol)
+        info = ticker_obj.info
+        # Check if we can get basic info about the stock
+        return 'longName' in info or 'shortName' in info
+    except:
+        return False
+
 #leave displayed first button results
 def display_stock_data():
     if st.session_state.stock_data_loaded:
@@ -57,15 +67,19 @@ def display_stock_data():
 # Initialize exchange and market_index variables outside the button handlers
 exchange = "Unknown"
 market_index = "N/A"
+# In the first button click handler, add this line before display_stock_data():
+st.session_state.ticker = ticker
 
-
-#Scarica i dati se è stato inserito un ticker  
+# Or better yet, modify the code to avoid the duplicate display:
 if st.button("Scarica dati stock"):
-    if ticker: # Scarica i dati dell'ultimo mese
+    # Add validation check here
+    if ticker and is_valid_ticker(ticker):
         data = stock.history(period="1mo")
         # Ottieni l'exchange e l'indice di mercato per lo stock
         exchange, market_index = get_market_index(ticker)
 
+        # Save to session state
+        st.session_state.ticker = ticker
         st.session_state.exchange = exchange
         st.session_state.market_index = market_index
         st.session_state.stock_data = data
@@ -78,14 +92,14 @@ if st.button("Scarica dati stock"):
             stock_info = stock.info
             beta = stock_info.get("beta", "N/A")
             st.session_state.beta = beta
-            st.write("Il Beta dell'azienda è:", beta)
-
-             # Display stock data
-            display_stock_data()
-
-              # Set flag that stock data has been loaded
+            st.write("Il Beta dell'azienda è:", beta) 
+            
+            # Set flag that stock data has been loaded
             st.session_state.stock_data_loaded = True
-
+    else:
+        # This is what was missing - display error for invalid ticker
+        st.error("⚠️ Nessun dato trovato. Controlla il ticker.")
+       
 # Always display stock data if it has been loaded
 elif st.session_state.stock_data_loaded:
     display_stock_data()
