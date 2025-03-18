@@ -46,6 +46,8 @@ ticker = st.text_input("Inserisci il ticker della stock:", "AAPL").upper()
 #variabile utilizzata nelle formule
 stock = yf.Ticker(ticker)
 
+risk_free_rate = 0.025  
+
 ## Funzione per ottenere l'indice di riferimento per una determinata azienda
 def get_market_index(ticker):
     stock_info = stock.info
@@ -120,9 +122,6 @@ elif st.session_state.stock_data_loaded:
 
 # Show the second button only if stock data has been loaded
 if st.session_state.stock_data_loaded:
-    # Mostra sempre i dati dell'indice se sono stati caricati
-    if st.session_state.index_data_loaded:
-        display_index_data()
 
     if st.button("Scarica dati dell'indice di riferimento"):
         market_index = st.session_state.market_index
@@ -134,30 +133,50 @@ if st.session_state.stock_data_loaded:
                 st.session_state.index_data = index_data
                 st.session_state.index_data_loaded = True
                 
-                st.write(f"📊 Dati storici per l'indice {market_index}:")
-                st.write(index_data)
             else:
                 st.error("⚠️ Nessun dato trovato per l'indice.")
         else:
             st.error("⚠️ Nessun indice di riferimento disponibile.")
+ # Mostra sempre i dati dell'indice se sono stati caricati
+if st.session_state.index_data_loaded:
+    display_index_data()
     
-    # Terzo bottone (ora correttamente indentato all'interno del blocco principale)
+if st.session_state.stock_data_loaded and st.session_state.index_data_loaded:
     if st.button("Calcola rendimenti giornalieri"):
-        
-        # Calcola i rendimenti giornalieri percentuali dello stock
+    
+    # Calcola i rendimenti giornalieri percentuali dello stock
         stock_returns = st.session_state.stock_data['Close'].pct_change() * 100
         st.write(f"📈 Rendimenti giornalieri percentuali di **{st.session_state.ticker}**:")
-        st.write(pd.DataFrame(stock_returns, columns=['Returns %']))
-        
-        # Se anche i dati dell'indice sono stati caricati, calcola i rendimenti dell'indice
+    
+    # Crea un DataFrame dal rendimento, mantenendo l'indice temporale
+        stock_returns_df = pd.DataFrame(stock_returns)
+        stock_returns_df.columns = ['Returns %']
+        st.write(stock_returns_df)
+        stock_return_mean = stock_returns_df['Returns %'].mean()
+        st.write(f"📊the expected return of the **{ticker}** is: **{stock_return_mean:.4f}%**")
+        stock_return_std = stock_returns_df['Returns %'].std()
+        st.write(f"📊the volatility of the **{ticker}** is: **{stock_return_std:.4f}**")
+    
+        st.markdown("---")
+
+    # Se anche i dati dell'indice sono stati caricati, calcola i rendimenti dell'indice
         if st.session_state.index_data_loaded:
             index_returns = st.session_state.index_data['Close'].pct_change() * 100
             st.write(f"📈 Rendimenti giornalieri percentuali dell'indice **{st.session_state.market_index}**:")
-            st.write(pd.DataFrame(index_returns, columns=['Returns %']))
+        
+            # Crea un DataFrame dal rendimento, mantenendo l'indice temporale
+            index_returns_df = pd.DataFrame(index_returns)
+            index_returns_df.columns = ['Returns %']
+            st.write(index_returns_df)
+            index_return_mean = index_returns_df['Returns %'].mean()
+            st.write(f"📊the expected return of the **{st.session_state.market_index}** is: **{index_return_mean:.4f}%**")
+            index_return_std = index_returns_df['Returns %'].std()
+            st.write(f"📊the volatility of the **{st.session_state.market_index}** is: **{index_return_std:.4f}**")
             
-            # Calcola la correlazione tra i rendimenti dello stock e dell'indice
-            # Elimina la prima riga (che contiene NaN) per entrambi i rendimenti
-            correlation = stock_returns[1:].corr(index_returns[1:])
-            st.write(f"Correlazione tra i rendimenti: **{correlation:.4f}**")
-else:
-    st.info("⚠️ Scarica prima i dati dello stock per poter visualizzare l'indice di riferimento.")
+            st.session_state.stock_return_mean = stock_return_mean
+            st.session_state.stock_return_std = stock_return_std
+            st.session_state.returns_calculated = True 
+
+if 'returns_calculated' in st.session_state and st.session_state.returns_calculated:
+    if st.button("Calcola Sharpe Ratio"):
+ 
