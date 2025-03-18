@@ -1,6 +1,5 @@
 import yfinance as yf
 import pandas as pd
-import os
 import streamlit as st
 import matplotlib.pyplot as plt
 
