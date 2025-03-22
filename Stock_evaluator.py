@@ -2,6 +2,7 @@ import yfinance as yf
 import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
 # N.B. il codice scarica dati da Yahoo finance, per questo non funziona su terminali esterni (CoLab, Streamlit Playground), è necessario runnare il codice su terminali interni (Codespace GitHub)
 
@@ -133,6 +134,8 @@ if st.session_state.stock_data_loaded:
     ax.set_title(f"{st.session_state.ticker} - Prezzo di Chiusura")
     ax.legend()
     ax.grid(False)
+    # Formatta asse X per mostrare solo i mesi (Jan, Feb, ...)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%d %b'))
 
     # Mostra il grafico 
     st.pyplot(fig)
@@ -166,6 +169,8 @@ if st.session_state.stock_data_loaded:
         ax.set_title(f"{st.session_state.market_index} - Prezzo di Chiusura")
         ax.legend()
         ax.grid(False)
+        # Formatta asse X per mostrare solo i mesi (Jan, Feb, ...)
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%d %b'))
 
     # Mostra il grafico in Streamlit
         st.pyplot(fig)
@@ -229,3 +234,4 @@ if st.session_state.stock_data_loaded:
                 st.write(f'📈 Lo Sharpe Ratio di **{st.session_state.ticker}** è: **{st.session_state.stock_sharpe_ratio:.4f}**')
                 st.write(f'📈 Lo Sharpe Ratio di **{st.session_state.market_index}** è: **{st.session_state.index_sharpe_ratio:.4f}**')
  
+
