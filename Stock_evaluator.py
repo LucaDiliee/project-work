@@ -97,11 +97,18 @@ def is_valid_ticker(ticker_symbol):
         return 'longName' in info or 'shortName' in info
     except:
         return False
+    
+
+periodo = st.selectbox(
+    "Seleziona l'intervallo temporale per i dati:",
+    ("1mo", "3mo", "6mo", "1y", "5y", "ytd", "max"),
+     index=2  # Imposta "6mo" come valore predefinito
+)
 
 if st.button("Scarica dati stock"):
     # Check per la validità, truthy and falsy
     if ticker and is_valid_ticker(ticker):
-        data = stock.history(period="1mo")
+        data = stock.history(period = periodo)
         # Ottieni l'exchange e l'indice di mercato per lo stock
         exchange, market_index = get_market_index(ticker)
 
@@ -145,7 +152,7 @@ if st.session_state.stock_data_loaded:
         market_index = st.session_state.market_index
 
         if market_index != "N/A":
-            index_data = yf.Ticker(market_index).history(period="1mo")
+            index_data = yf.Ticker(market_index).history(period = periodo)
             if not index_data.empty:
                 # Salva i dati nella session state
                 st.session_state.index_data = index_data
@@ -233,5 +240,3 @@ if st.session_state.stock_data_loaded:
             if st.session_state.sharpe_ratio_calculated:
                 st.write(f'📈 Lo Sharpe Ratio di **{st.session_state.ticker}** è: **{st.session_state.stock_sharpe_ratio:.4f}**')
                 st.write(f'📈 Lo Sharpe Ratio di **{st.session_state.market_index}** è: **{st.session_state.index_sharpe_ratio:.4f}**')
- 
-
