@@ -29,8 +29,6 @@ exchange_to_index = {
     "LSE": "^FTSE",       # Londra → FTSE 100
     "BSE": "^BSESN",       # Bombay Stock Exchange → SENSEX
     "TSX": "^GSPTSE",     # Borsa canadese (Toronto) → S&P/TSX Composite
-    "ASX": "^AXJO",       # Borsa australiana → S&P/ASX 200
-    "SAO": "^BVSP",       # Borsa brasiliana (B3) → Bovespa Index
     "KRX": "^KS11",       # Borsa coreana → KOSPI Index
     "SHE": "000300.SS",   # Borsa cinese Shenzhen → CSI 300
     "SHH": "000300.SS"    # Borsa cinese Shanghai → CSI 300
