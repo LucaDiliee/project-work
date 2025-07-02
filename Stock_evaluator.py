@@ -3,54 +3,9 @@ import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+import numpy as np                   
+import statsmodels.api as sm
 
-# N.B. il codice scarica dati da Yahoo finance, per questo non funziona su terminali esterni (CoLab, Streamlit Playground), è necessario runnare il codice su terminali interni (Codespace GitHub)
-
-"""
-# Stocks evaluator
-Ciao User, digita qui sotto il ticker della stock di cui vuoi analizzare i dati
-
-**DISCLAIMER**: è necessario utilizzare i ticker di Yahoo Finance purchè l'applicazione funzioni
-"""
-
-# Dizionario exchange to index
-exchange_to_index = {
-    "NasdaqGS": "^GSPC",  # Nasdaq Global Select → S&P 500
-    "NasdaqGM": "^GSPC",  # Nasdaq Global Market → S&P 500
-    "NYSE": "^GSPC",      # New York Stock Exchange → S&P 500
-    "AMEX": "^GSPC",      # American Stock Exchange → S&P 500
-    "NMS": "^GSPC",       # Nasdaq NMS → S&P 500
-    "MIL": "FTSEMIB.MI",  # Borsa Italiana → FTSE MIB
-    "PAR": "^FCHI",       # Euronext Paris → CAC 40
-    "XETRA": "^GDAXI",    # Borsa tedesca (Deutsche Börse) → DAX
-    "GER": "^GDAXI",      # Borsa tedesca (Deutsche Börse) → DAX
-    "PNK": "^N225",       # Borsa di Tokyo → Nikkei 225
-    "NSI": "^NSEI",       # Bosa dell'India → NIFTY 50
-    "LSE": "^FTSE",       # Londra → FTSE 100
-    "BSE": "^BSESN",       # Bombay Stock Exchange → SENSEX
-    "TSX": "^GSPTSE",     # Borsa canadese (Toronto) → S&P/TSX Composite
-    "KRX": "^KS11",       # Borsa coreana → KOSPI Index
-    "SHE": "000300.SS",   # Borsa cinese Shenzhen → CSI 300
-    "SHH": "000300.SS"    # Borsa cinese Shanghai → CSI 300
-}
-
-# Session state variables inizializzate
-if 'stock_data_loaded' not in st.session_state:
-    st.session_state.stock_data_loaded = False
-if 'index_data_loaded' not in st.session_state:
-    st.session_state.index_data_loaded = False
-if 'exchange' not in st.session_state:
-    st.session_state.exchange = "Unknown"
-if 'market_index' not in st.session_state:
-    st.session_state.market_index = "N/A"
-if 'stock_data' not in st.session_state:
-    st.session_state.stock_data = None
-if 'index_data' not in st.session_state:
-    st.session_state.index_data = None
-if 'ticker' not in st.session_state:
-    st.session_state.ticker = ""
-if 'returns_calculated' not in st.session_state:
-    st.session_state.returns_calculated = False
 if 'stock_returns_df' not in st.session_state:
     st.session_state.stock_returns_df = None
 if 'index_returns_df' not in st.session_state:
@@ -63,178 +18,181 @@ if 'index_return_mean' not in st.session_state:
     st.session_state.index_return_mean = 0
 if 'index_return_std' not in st.session_state:
     st.session_state.index_return_std = 0
-if 'sharpe_ratio_calculated' not in st.session_state:
-    st.session_state.sharpe_ratio_calculated = False
 if 'stock_sharpe_ratio' not in st.session_state:
     st.session_state.stock_sharpe_ratio = 0
 if 'index_sharpe_ratio' not in st.session_state:
     st.session_state.index_sharpe_ratio = 0
- 
-# Valore predefinito: Apple, upper per eviare case sensitivity   
-ticker = st.text_input("Inserisci il ticker della stock:", "AAPL").upper()
+if 'beta' not in st.session_state: 
+    st.session_state.beta = None
+if 'alpha' not in st.session_state: 
+    st.session_state.alpha = None
+if 'expected_return_capm' not in st.session_state: 
+    st.session_state.expected_return_capm = None
+if 'sharpe_capm' not in st.session_state: 
+    st.session_state.sharpe_capm = None
 
-# Variabile utilizzata nelle formule
-stock = yf.Ticker(ticker)
+st.set_page_config(page_title="Stocks Evaluator", layout="centered")
 
-risk_free_rate = 0.025 
-daily_risk_free_rate = 0.00009921 
+"""
+# 📈 Stocks Evaluator
+Ciao User, digita qui sotto il ticker della stock di cui vuoi analizzare i dati
 
-# Funzione per ottenere l'indice di riferimento per una determinata azienda, get funzione di python, da dizionario cerca (argomento, default)
-def get_market_index(ticker):
-    stock_info = stock.info
+**DISCLAIMER**: è necessario utilizzare i ticker di Yahoo Finance affinché l'applicazione funzioni
+"""
+
+# Dizionario exchange to index
+exchange_to_index = {
+    "NasdaqGS": "^GSPC", "NasdaqGM": "^GSPC", "NYSE": "^GSPC", "AMEX": "^GSPC", "NMS": "^GSPC",
+    "MIL": "FTSEMIB.MI", "PAR": "^FCHI", "XETRA": "^GDAXI", "GER": "^GDAXI",
+    "PNK": "^N225", "NSI": "^NSEI", "LSE": "^FTSE", "BSE": "^BSESN",
+    "TSX": "^GSPTSE", "KRX": "^KS11", "SHE": "000300.SS", "FRA": "^GDAXI"
+}
+
+# Input
+ticker = st.text_input("📌 Inserisci il ticker della stock:", "AAPL").upper()
+periodo = st.selectbox("📆 Seleziona l'intervallo temporale per i dati:",
+                       ("1mo", "3mo", "6mo", "1y", "5y", "ytd", "max"), index=2)
+
+# Risk Free
+treasury_10y = yf.Ticker("^TNX")
+rf_data = treasury_10y.history(period="1d")
+rf_today = rf_data['Close'].iloc[-1] / 100
+risk_free_annual = rf_today
+daily_risk_free_rate = risk_free_annual/252 
+
+def is_valid_ticker(ticker_symbol):
+    try:
+        info = yf.Ticker(ticker_symbol).info
+        return 'longName' in info or 'shortName' in info
+    except:
+        return False
+
+def get_market_index(ticker_obj):
+    stock_info = ticker_obj.info
     exchange = stock_info.get("exchange", "Unknown")
     market_index = exchange_to_index.get(exchange, "N/A")
     return exchange, market_index
 
-# Controllo se il ticker è valido, try è necessario se mettessi if python darebbe errore
-def is_valid_ticker(ticker_symbol):
-    try:
-        ticker_obj = yf.Ticker(ticker_symbol)
-        info = ticker_obj.info
-        # Semplice check qualsiasi, cerca nel dizionario info due informazioni 
-        return 'longName' in info or 'shortName' in info
-    except:
-        return False
-    
-
-periodo = st.selectbox(
-    "Seleziona l'intervallo temporale per i dati:",
-    ("1mo", "3mo", "6mo", "1y", "5y", "ytd", "max"),
-     index=2  # Imposta "6mo" come valore predefinito
-)
-
-if st.button("Scarica dati stock"):
-    # Check per la validità, truthy and falsy
+# Bottone 
+if st.button("📥 Avvia analisi completa"):
     if ticker and is_valid_ticker(ticker):
-        data = stock.history(period = periodo)
-        # Ottieni l'exchange e l'indice di mercato per lo stock
-        exchange, market_index = get_market_index(ticker)
+        stock = yf.Ticker(ticker)
+        stock_data = stock.history(period=periodo)
 
-        # Salva in session state
+        # Ottieni exchange e indice
+        exchange, market_index = get_market_index(stock)
+
         st.session_state.ticker = ticker
         st.session_state.exchange = exchange
         st.session_state.market_index = market_index
-        st.session_state.stock_data = data
-            
-        # Flagga che i dati sono stati salvati
-        st.session_state.stock_data_loaded = True
-        # Resetta tutti gli altri in caso venga lanciato uno stock diverso dal precedente
-        st.session_state.index_data_loaded = False
-        st.session_state.returns_calculated = False
-        st.session_state.sharpe_ratio_calculated = False
-    else:
-        st.error("⚠️ Nessun dato trovato. Controlla il ticker.")       
+        st.session_state.stock_data = stock_data
 
-# Se stock data loaded in session state allora i dati rimangono sempre displayed
-if st.session_state.stock_data_loaded:
-    st.write(f"Lo stock **{st.session_state.ticker}** è quotato su **{st.session_state.exchange}** e il suo indice di riferimento è **{st.session_state.market_index}**")
-    st.write(f"📊 Prezzi storici di **{st.session_state.ticker}**:", st.session_state.stock_data)
-    st.write("📊 Grafico delle chiusure dello stock:")
-
-    # Creazione del grafico per la stock
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.plot(st.session_state.stock_data.index, st.session_state.stock_data['Close'], label=f"{st.session_state.ticker} Closing Price", color='blue')
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Closing Price")
-    ax.set_title(f"{st.session_state.ticker} - Prezzo di Chiusura")
-    ax.legend()
-    ax.grid(False)
-    # Formatta asse X per mostrare solo i mesi (Jan, Feb, ...)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%d %b'))
-
-    # Mostra il grafico 
-    st.pyplot(fig)
-
-    # Mostra bottone solo se sono stati scaricati i dati dello stock
-    if st.button("Scarica dati dell'indice di riferimento"):
-        market_index = st.session_state.market_index
-
+        # Scarica dati indice
         if market_index != "N/A":
-            index_data = yf.Ticker(market_index).history(period = periodo)
+            index_data = yf.Ticker(market_index).history(period=periodo)
             if not index_data.empty:
-                # Salva i dati nella session state
                 st.session_state.index_data = index_data
-                st.session_state.index_data_loaded = True
+
+                # Calcolo rendimenti
+                stock_returns = stock_data['Close'].pct_change() * 100
+                index_returns = index_data['Close'].pct_change() * 100
+
+                stock_returns_df = stock_returns.dropna().to_frame(name='Returns %')
+                st.session_state.stock_returns_df = stock_returns_df
+                index_returns_df = index_returns.dropna().to_frame(name='Returns %')
+                st.session_state.index_returns_df = index_returns_df
+
+                st.session_state.stock_return_mean = stock_returns.mean()
+                st.session_state.stock_return_std = stock_returns.std()
+                st.session_state.index_return_mean = index_returns.mean()
+                st.session_state.index_return_std = index_returns.std()
+
+                # Sharpe Ratio
+                sr_stock = (st.session_state.stock_return_mean - daily_risk_free_rate) / st.session_state.stock_return_std
+                sr_index = (st.session_state.index_return_mean - daily_risk_free_rate) / st.session_state.index_return_std
+
+                st.session_state.stock_sharpe_ratio = sr_stock
+                st.session_state.index_sharpe_ratio = sr_index
+                #  β e α via regressione 
+                merged = pd.concat([stock_returns, index_returns], axis=1).dropna()
+                merged.columns = ['rs', 'rm']        
+                X = sm.add_constant(merged['rm'])
+                model = sm.OLS(merged['rs'], X).fit()
+                beta  = model.params['rm']
+                alpha = model.params['const']
+                st.session_state.beta  = beta
+                st.session_state.alpha = alpha
+
+                # Expected return CAPM (annual)  
+                mkt_daily = st.session_state.index_return_mean / 100      
+                mkt_ann   = (1 + mkt_daily) ** 252 - 1                    
+                exp_capm  = risk_free_annual + beta * (mkt_ann - risk_free_annual)
+                st.session_state.expected_return_capm = exp_capm * 100    # in %
+
+                # Sharpe Ratio basato su CAPM  
+                vol_daily_dec = st.session_state.stock_return_std / 100
+                vol_ann = vol_daily_dec * np.sqrt(252)
+                st.session_state.sharpe_capm = (exp_capm - risk_free_annual) / vol_ann
+
             else:
                 st.error("⚠️ Nessun dato trovato per l'indice.")
         else:
             st.error("⚠️ Nessun indice di riferimento disponibile.")
+    else:
+        st.error("⚠️ Nessun dato trovato. Controlla il ticker.")
 
-    # Mostra sempre i dati se index data loaded
-    if st.session_state.index_data_loaded:
-        st.write(f"📊 Dati storici per l'indice {st.session_state.market_index}:")
-        st.write(st.session_state.index_data)
-        st.write("📊 Grafico della chiusura dell'indice di riferimento")
+# Visualizzazione
+if "stock_data" in st.session_state and st.session_state.stock_data is not None:
+    st.write(f"✅ **{st.session_state.ticker}** è quotata su **{st.session_state.exchange}**, indice di riferimento: **{st.session_state.market_index}**")
+    st.write("📊 Prezzi storici:", st.session_state.stock_data)
 
-    # Creazione del grafico per l'indice
-        fig, ax = plt.subplots(figsize=(8, 4))
-        ax.plot(st.session_state.index_data.index, st.session_state.index_data['Close'], label=f"{st.session_state.market_index} Closing Price", color='red')
-        ax.set_xlabel("Date")
-        ax.set_ylabel("Closing Price")
-        ax.set_title(f"{st.session_state.market_index} - Prezzo di Chiusura")
-        ax.legend()
-        ax.grid(False)
-        # Formatta asse X per mostrare solo i mesi (Jan, Feb, ...)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%d %b'))
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.plot(st.session_state.stock_data.index, st.session_state.stock_data['Close'], label=f"{ticker} Closing Price")
+    ax.set_title(f"{ticker} - Prezzo di Chiusura")
+    ax.set_xlabel("Data")
+    ax.set_ylabel("Prezzo")
+    ax.legend()
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%d %b'))
+    st.pyplot(fig)
 
-    # Mostra il grafico in Streamlit
-        st.pyplot(fig)
-        
-        # Mostra terzo bottone se i dati dell'indice sono stati caricati
-        if st.button("Calcola rendimenti giornalieri"):
-            # Calcola i rendimenti giornalieri percentuali dello stock
-            stock_returns = st.session_state.stock_data['Close'].pct_change() * 100   
-            stock_returns_df = pd.DataFrame(stock_returns)
-            stock_returns_df.columns = ['Returns %']
-            stock_return_mean = stock_returns_df['Returns %'].mean()
-            stock_return_std = stock_returns_df['Returns %'].std()
-            
-            # Calcola i rendimenti dell'indice
-            index_returns = st.session_state.index_data['Close'].pct_change() * 100
-            index_returns_df = pd.DataFrame(index_returns)
-            index_returns_df.columns = ['Returns %']
-            index_return_mean = index_returns_df['Returns %'].mean()
-            index_return_std = index_returns_df['Returns %'].std()
-            
-            # Salva in session state, flag returns_calculated
-            st.session_state.stock_returns_df = stock_returns_df
-            st.session_state.index_returns_df = index_returns_df
-            st.session_state.stock_return_mean = stock_return_mean
-            st.session_state.stock_return_std = stock_return_std
-            st.session_state.index_return_mean = index_return_mean
-            st.session_state.index_return_std = index_return_std
-            st.session_state.returns_calculated = True
+if "index_data" in st.session_state and st.session_state.index_data is not None:
+    st.write(f"📊 Dati indice: {st.session_state.market_index}", st.session_state.index_data)
 
-        # Mostra sempre i ritorni giornalieri se calcolati
-        if st.session_state.returns_calculated:
-            st.write(st.session_state.stock_returns_df)
-            st.write(f"📊 the expected return of the **{st.session_state.ticker}** is: **{st.session_state.stock_return_mean:.4f}%**")
-            st.write(f"📊 the volatility of the **{st.session_state.ticker}** is: **{st.session_state.stock_return_std:.4f}**")
-            st.markdown("---")
-            st.write(st.session_state.index_returns_df)
-            st.write(f"📊 the expected return of the **{st.session_state.market_index}** is: **{st.session_state.index_return_mean:.4f}%**")
-            st.write(f"📊 the volatility of the **{st.session_state.market_index}** is: **{st.session_state.index_return_std:.4f}**")
-            
-            # Mostra solo se i ritorni giornalieri sono stati calcolati
-            if st.button("Calcola Sharpe Ratio"):
-                # Utilizziamo i valori salvati in session_state
-                stock_return_mean = st.session_state.stock_return_mean
-                stock_return_std = st.session_state.stock_return_std
-                index_return_mean = st.session_state.index_return_mean
-                index_return_std = st.session_state.index_return_std
-                
-                # Calcolo dello Sharpe Ratio
-                stock_risk_premium = (stock_return_mean - daily_risk_free_rate)
-                stock_sharpe_ratio = stock_risk_premium / stock_return_std
-                index_risk_premium = (index_return_mean - daily_risk_free_rate)
-                index_sharpe_ratio = index_risk_premium / index_return_std
-                
-                # Salva i risultati in session state, Flag sharpe_ratio_calculated
-                st.session_state.stock_sharpe_ratio = stock_sharpe_ratio
-                st.session_state.index_sharpe_ratio = index_sharpe_ratio
-                st.session_state.sharpe_ratio_calculated = True
-            
-            # Mostra sempre lo Sharpe se calcolato
-            if st.session_state.sharpe_ratio_calculated:
-                st.write(f'📈 Lo Sharpe Ratio di **{st.session_state.ticker}** è: **{st.session_state.stock_sharpe_ratio:.4f}**')
-                st.write(f'📈 Lo Sharpe Ratio di **{st.session_state.market_index}** è: **{st.session_state.index_sharpe_ratio:.4f}**')
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.plot(st.session_state.index_data.index, st.session_state.index_data['Close'], label="Index Closing Price", color='red')
+    ax.set_title(f"{st.session_state.market_index} - Prezzo di Chiusura")
+    ax.set_xlabel("Data")
+    ax.set_ylabel("Prezzo")
+    ax.legend()
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%d %b'))
+    st.pyplot(fig)
+
+if "stock_returns_df" in st.session_state:
+    st.markdown("## 📈 Rendimenti e Volatilità")
+    st.write("### Stock Returns", st.session_state.stock_returns_df)
+    st.write(f"📊 Expected daily return: **{st.session_state.stock_return_mean:.4f}%**")
+    st.write(f"📊 Daily Volatility: **{st.session_state.stock_return_std:.4f}%**")
+    st.write(f"📊 Expected annual return: **{st.session_state.stock_return_mean*252:.4f}%**")
+    st.write(f"📊 Annual Volatility: **{st.session_state.stock_return_std*np.sqrt(252):.4f}%**")
+    st.markdown("---")
+
+    st.write("### Index Returns", st.session_state.index_returns_df)
+    st.write(f"📊 Expected daily return: **{st.session_state.index_return_mean:.4f}%**")
+    st.write(f"📊 Daily Volatility: **{st.session_state.index_return_std:.4f}%**")
+    st.write(f"📊 Expected annual return: **{st.session_state.index_return_mean*252:.4f}%**")
+    st.write(f"📊 Annual Volatility: **{st.session_state.index_return_std*np.sqrt(252):.4f}%**")
+
+if "stock_sharpe_ratio" in st.session_state:
+    st.markdown("## 📌 Daily Sharpe Ratio")
+    st.write(f"📈 **{ticker}**: **{st.session_state.stock_sharpe_ratio:.4f}**")
+    st.write(f"📈 **{st.session_state.market_index}**: **{st.session_state.index_sharpe_ratio:.4f}**")
+    st.markdown("## 📌 Annual Sharpe Ratio")
+    st.write(f"📈 **{ticker}**: **{st.session_state.stock_sharpe_ratio*np.sqrt(252):.4f}**")
+    st.write(f"📈 **{st.session_state.market_index}**: **{st.session_state.index_sharpe_ratio*np.sqrt(252):.4f}**")
+
+if st.session_state.beta is not None:
+    st.markdown("## 🧩 CAPM")
+    st.write(f"α (alpha): **{st.session_state.alpha:.5f}**")
+    st.write(f"β (beta): **{st.session_state.beta:.3f}**")
+    st.write(f"Expected return (ann.): **{st.session_state.expected_return_capm:.2f}%**")
+    st.write(f"Sharpe Ratio (ann.): **{st.session_state.sharpe_capm:.2f}**")
